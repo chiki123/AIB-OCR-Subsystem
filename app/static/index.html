@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIB OCR — Загрузка документов</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:      #1F5C99;
+      --blue-lt:   #D6E4F0;
+      --blue-dk:   #154272;
+      --green:     #27AE60;
+      --red:       #E74C3C;
+      --orange:    #F39C12;
+      --gray-bg:   #F4F6F8;
+      --gray-brd:  #DDE1E7;
+      --text:      #2C3E50;
+      --text-lt:   #7F8C8D;
+      --radius:    10px;
+      --shadow:    0 2px 16px rgba(0,0,0,.08);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--gray-bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    header {
+      background: var(--blue);
+      color: #fff;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    header span { font-size: .85rem; opacity: .7; margin-left: auto; }
+
+    /* ── Layout ──────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--blue);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--blue-lt);
+    }
+
+    /* ── Drop Zone ───────────────────────────────────── */
+    #drop-zone {
+      border: 2px dashed var(--gray-brd);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: var(--gray-bg);
+    }
+    #drop-zone:hover,
+    #drop-zone.dragover {
+      border-color: var(--blue);
+      background: var(--blue-lt);
+    }
+    #drop-zone svg { width: 52px; opacity: .4; margin-bottom: 12px; }
+    #drop-zone p   { color: var(--text-lt); font-size: .95rem; }
+    #drop-zone strong { color: var(--blue); cursor: pointer; }
+    #file-input { display: none; }
+
+    /* ── Status bar ──────────────────────────────────── */
+    #status-bar {
+      display: none;
+      margin-top: 20px;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      font-size: .9rem;
+      font-weight: 500;
+    }
+    #status-bar.queued    { background:#EBF5FB; color:#1A5276; border:1px solid #AED6F1; }
+    #status-bar.processing{ background:#FEF9E7; color:#7D6608; border:1px solid #F9E79F; }
+    #status-bar.success   { background:#EAFAF1; color:#1E8449; border:1px solid #A9DFBF; }
+    #status-bar.error     { background:#FDEDEC; color:#922B21; border:1px solid #F5B7B1; }
+
+    /* ── Progress bar ────────────────────────────────── */
+    .progress-wrap {
+      background: var(--gray-brd);
+      border-radius: 99px;
+      height: 6px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--blue);
+      border-radius: 99px;
+      width: 0%;
+      transition: width .4s ease;
+    }
+
+    /* ── Fields table ────────────────────────────────── */
+    .fields-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .fields-table th {
+      background: var(--blue-lt);
+      color: var(--blue-dk);
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+    .fields-table td { padding: 8px 12px; border-bottom: 1px solid var(--gray-brd); }
+    .fields-table tr:last-child td { border-bottom: none; }
+    .fields-table .value { font-weight: 500; }
+    .fields-table .null  { color: var(--text-lt); font-style: italic; }
+
+    /* ── Confidence badge ────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+    .badge.high   { background: #D5F5E3; color: #1E8449; }
+    .badge.medium { background: #FEF9E7; color: #7D6608; }
+    .badge.low    { background: #FDEDEC; color: #922B21; }
+
+    /* ── Buttons ─────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 20px;
+      border: none; border-radius: var(--radius);
+      font-size: .9rem; font-weight: 500;
+      cursor: pointer; transition: all .18s;
+    }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover { background: var(--blue-dk); }
+    .btn-success { background: var(--green); color: #fff; }
+    .btn-success:hover { filter: brightness(.9); }
+    .btn-ghost { background: transparent; border: 1px solid var(--gray-brd); color: var(--text); }
+    .btn-ghost:hover { background: var(--gray-bg); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── History list ────────────────────────────────── */
+    #history-list { list-style: none; }
+    #history-list li {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--gray-brd);
+      font-size: .87rem;
+      cursor: pointer;
+    }
+    #history-list li:hover { color: var(--blue); }
+    #history-list li:last-child { border-bottom: none; }
+    .hist-icon { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .hist-icon.success    { background: var(--green); }
+    .hist-icon.processing { background: var(--orange); }
+    .hist-icon.failed     { background: var(--red); }
+    .hist-icon.pending    { background: var(--gray-brd); }
+    .hist-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hist-type { color: var(--text-lt); font-size: .8rem; }
+
+    /* ── Empty state ─────────────────────────────────── */
+    .empty { text-align: center; padding: 32px; color: var(--text-lt); font-size: .9rem; }
+
+    /* ── Spinner ─────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+  <h1>AIB OCR — Распознавание первичных документов</h1>
+  <span>ООО «АИБ» · On-Premise</span>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<div class="container">
+  <div class="grid">
+
+    <!-- Левая колонка: загрузка -->
+    <div>
+      <div class="card">
+        <h2>📤 Загрузка документа</h2>
+
+        <div id="drop-zone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p>Перетащите файл сюда или <strong onclick="document.getElementById('file-input').click()">выберите файл</strong></p>
+          <p style="margin-top:6px; font-size:.8rem;">PDF, JPG, PNG, TIFF · Максимум 50 МБ</p>
+          <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp" />
+        </div>
+
+        <div id="status-bar"></div>
+        <div class="progress-wrap" id="progress-wrap" style="display:none;">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+
+        <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="upload-btn" disabled>
+            📤 Загрузить
+          </button>
+          <button class="btn btn-ghost" id="reset-btn" style="display:none">
+            🔄 Новый файл
+          </button>
+        </div>
+      </div>
+
+      <!-- Типы документов -->
+      <div class="card" style="margin-top:20px;">
+        <h2>📋 Поддерживаемые документы</h2>
+        <table class="fields-table">
+          <tr><th>Тип</th><th>Название</th></tr>
+          <tr><td><b>Счет-фактура</b></td><td>НДС документ (форма КНД 1151001)</td></tr>
+          <tr><td><b>УПД</b></td><td>Универсальный передаточный документ</td></tr>
+          <tr><td><b>ТОРГ-12</b></td><td>Товарная накладная (унифицированная форма)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Правая колонка: результаты -->
+    <div>
+      <div class="card" id="result-card" style="display:none;">
+        <h2>✅ Результат распознавания</h2>
+        <div id="result-content"></div>
+        <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-success" id="send-1c-btn">
+            🏢 Отправить в 1С
+          </button>
+          <button class="btn btn-ghost" id="copy-json-btn">
+            📋 Копировать JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- История -->
+      <div class="card" style="margin-top:20px;">
+        <h2>🕐 Последние документы</h2>
+        <ul id="history-list"><li class="empty">Нет документов</li></ul>
+        <button class="btn btn-ghost" id="refresh-history-btn" style="margin-top:14px; font-size:.82rem;">
+          🔄 Обновить
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────────
+const API = "";   // Пустая строка = тот же сервер
+let currentFile = null;
+let currentDocId = null;
+let currentTaskId = null;
+let currentResult = null;
+let pollInterval = null;
+
+// ── Elements ───────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById("drop-zone");
+const fileInput  = document.getElementById("file-input");
+const uploadBtn  = document.getElementById("upload-btn");
+const resetBtn   = document.getElementById("reset-btn");
+const statusBar  = document.getElementById("status-bar");
+const progressWrap = document.getElementById("progress-wrap");
+const progressBar  = document.getElementById("progress-bar");
+const resultCard   = document.getElementById("result-card");
+const resultContent = document.getElementById("result-content");
+const send1CBtn  = document.getElementById("send-1c-btn");
+const copyJsonBtn = document.getElementById("copy-json-btn");
+const historyList = document.getElementById("history-list");
+const refreshHistBtn = document.getElementById("refresh-history-btn");
+
+// ── Drag & Drop ────────────────────────────────────────────────────────────
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) selectFile(file);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) selectFile(fileInput.files[0]);
+});
+
+function selectFile(file) {
+  currentFile = file;
+  dropZone.querySelector("p").textContent = `Выбран: ${file.name} (${humanSize(file.size)})`;
+  uploadBtn.disabled = false;
+  resetBtn.style.display = "inline-flex";
+}
+
+// ── Upload ─────────────────────────────────────────────────────────────────
+uploadBtn.addEventListener("click", async () => {
+  if (!currentFile) return;
+
+  setStatus("queued", `<span class="spinner"></span>&nbsp; Загрузка файла…`);
+  setProgress(5);
+  uploadBtn.disabled = true;
+
+  const form = new FormData();
+  form.append("file", currentFile);
+
+  try {
+    const res = await fetch(`${API}/api/v1/documents/upload`, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    currentDocId  = data.document_id;
+    currentTaskId = data.task_id;
+
+    setStatus("processing", `<span class="spinner"></span>&nbsp; Обработка документа…`);
+    setProgress(10);
+    startPolling();
+
+  } catch (e) {
+    setStatus("error", `❌ Ошибка загрузки: ${e.message}`);
+    uploadBtn.disabled = false;
+  }
+});
+
+// ── Polling ────────────────────────────────────────────────────────────────
+function startPolling() {
+  clearInterval(pollInterval);
+  pollInterval = setInterval(pollStatus, 2500);
+}
+
+const STAGE_LABELS = {
+  preprocessor: "Предобработка изображения…",
+  ocr:          "Распознавание текста (OCR)…",
+  classifier:   "Определение типа документа…",
+  extractor:    "Извлечение данных…",
+  validator:    "Валидация данных…",
+  integrator:   "Подготовка для 1С…",
+};
+
+async function pollStatus() {
+  try {
+    const res = await fetch(`${API}/api/v1/tasks/${currentTaskId}/status`);
+    const data = await res.json();
+
+    const progress = data.progress || 10;
+    setProgress(progress);
+
+    if (data.stage) {
+      const label = STAGE_LABELS[data.stage] || data.stage;
+      setStatus("processing", `<span class="spinner"></span>&nbsp; ${label}`);
+    }
+
+    if (data.status === "success") {
+      clearInterval(pollInterval);
+      setProgress(100);
+      setStatus("success", `✅ Документ успешно обработан`);
+      await loadResult();
+      await loadHistory();
+    }
+
+    if (data.status === "failed") {
+      clearInterval(pollInterval);
+      setStatus("error", `❌ Ошибка: ${data.error || "Неизвестная ошибка"}`);
+      uploadBtn.disabled = false;
+    }
+
+  } catch (e) {
+    console.error("Polling error:", e);
+  }
+}
+
+// ── Load Result ────────────────────────────────────────────────────────────
+async function loadResult() {
+  const res = await fetch(`${API}/api/v1/documents/${currentDocId}`);
+  if (!res.ok) return;
+  currentResult = await res.json();
+  renderResult(currentResult);
+}
+
+function renderResult(doc) {
+  const f = doc.extracted_fields || {};
+  const conf = doc.confidence_score;
+  const confClass = conf >= 0.85 ? "high" : conf >= 0.6 ? "medium" : "low";
+  const confPct = conf ? Math.round(conf * 100) + "%" : "—";
+
+  const docTypeLabel = {
+    invoice: "Счет-фактура",
+    upd:     "УПД",
+    torg12:  "ТОРГ-12",
+    unknown: "Не определён",
+  }[doc.document_type] || doc.document_type || "—";
+
+  const rows = [
+    ["Тип документа",  docTypeLabel],
+    ["Уверенность",    `<span class="badge ${confClass}">${confPct}</span>`],
+    ["Поставщик",      f.supplier_name    || null],
+    ["ИНН поставщика", f.supplier_inn     || null],
+    ["КПП поставщика", f.supplier_kpp     || null],
+    ["Покупатель",     f.buyer_name       || null],
+    ["ИНН покупателя", f.buyer_inn        || null],
+    ["КПП покупателя", f.buyer_kpp        || null],
+    ["Номер документа",f.document_number  || null],
+    ["Дата документа", f.document_date    || null],
+    ["Итого",          f.total_amount != null ? fmtAmount(f.total_amount) : null],
+    ["в т.ч. НДС",     f.vat_amount   != null ? fmtAmount(f.vat_amount)   : null],
+    ["Валюта",         f.currency         || "RUB"],
+  ];
+
+  const trs = rows.map(([label, val]) => {
+    const valHtml = val !== null && val !== undefined
+      ? `<span class="value">${val}</span>`
+      : `<span class="null">не определено</span>`;
+    return `<tr><td>${label}</td><td>${valHtml}</td></tr>`;
+  }).join("");
+
+  resultContent.innerHTML = `<table class="fields-table"><thead><tr><th>Поле</th><th>Значение</th></tr></thead><tbody>${trs}</tbody></table>`;
+  resultCard.style.display = "";
+
+  send1CBtn.dataset.docId = doc.document_id;
+}
+
+// ── Send to 1C ─────────────────────────────────────────────────────────────
+send1CBtn.addEventListener("click", async () => {
+  const docId = send1CBtn.dataset.docId;
+  if (!docId) return;
+
+  send1CBtn.disabled = true;
+  send1CBtn.innerHTML = `<span class="spinner"></span>&nbsp; Отправка…`;
+
+  try {
+    const res = await fetch(`${API}/api/v1/documents/${docId}/send-to-1c`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ document_id: docId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      send1CBtn.innerHTML = "✅ Отправлено в 1С";
+    } else {
+      throw new Error(data.message);
+    }
+  } catch (e) {
+    alert("Ошибка отправки в 1С: " + e.message);
+    send1CBtn.disabled = false;
+    send1CBtn.innerHTML = "🏢 Отправить в 1С";
+  }
+});
+
+// ── Copy JSON ──────────────────────────────────────────────────────────────
+copyJsonBtn.addEventListener("click", () => {
+  if (!currentResult) return;
+  navigator.clipboard.writeText(JSON.stringify(currentResult, null, 2));
+  copyJsonBtn.textContent = "✅ Скопировано!";
+  setTimeout(() => { copyJsonBtn.textContent = "📋 Копировать JSON"; }, 2000);
+});
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+resetBtn.addEventListener("click", () => {
+  currentFile = null;
+  currentDocId = null;
+  currentTaskId = null;
+  currentResult = null;
+  clearInterval(pollInterval);
+  fileInput.value = "";
+  uploadBtn.disabled = true;
+  resetBtn.style.display = "none";
+  statusBar.style.display = "none";
+  progressWrap.style.display = "none";
+  resultCard.style.display = "none";
+  dropZone.querySelector("p").textContent = `Перетащите файл сюда или`;
+  send1CBtn.disabled = false;
+  send1CBtn.innerHTML = "🏢 Отправить в 1С";
+});
+
+// ── History ────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API}/api/v1/documents/?page_size=10`);
+    const data = await res.json();
+
+    if (!data.items || data.items.length === 0) {
+      historyList.innerHTML = `<li class="empty">Нет документов</li>`;
+      return;
+    }
+
+    const docTypeLabel = { invoice: "Счет-фактура", upd: "УПД", torg12: "ТОРГ-12" };
+
+    historyList.innerHTML = data.items.map(doc => `
+      <li onclick="loadHistoryItem('${doc.document_id}')">
+        <span class="hist-icon ${doc.status}"></span>
+        <span class="hist-name">${doc.original_filename}</span>
+        <span class="hist-type">${docTypeLabel[doc.document_type] || "—"}</span>
+      </li>
+    `).join("");
+
+  } catch (e) {
+    historyList.innerHTML = `<li class="empty">Ошибка загрузки истории</li>`;
+  }
+}
+
+async function loadHistoryItem(docId) {
+  const res = await fetch(`${API}/api/v1/documents/${docId}`);
+  if (!res.ok) return;
+  currentResult = await res.json();
+  currentDocId = docId;
+  renderResult(currentResult);
+  setStatus("success", "✅ Просмотр ранее обработанного документа");
+}
+
+refreshHistBtn.addEventListener("click", loadHistory);
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setStatus(type, html) {
+  statusBar.className = `status-bar ${type}`;
+  statusBar.innerHTML = html;
+  statusBar.style.display = "";
+}
+
+function setProgress(pct) {
+  progressWrap.style.display = "";
+  progressBar.style.width = pct + "%";
+}
+
+function humanSize(bytes) {
+  if (bytes < 1024) return bytes + " Б";
+  if (bytes < 1024**2) return (bytes/1024).toFixed(1) + " КБ";
+  return (bytes/1024**2).toFixed(1) + " МБ";
+}
+
+function fmtAmount(n) {
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency", currency: "RUB", minimumFractionDigits: 2
+  }).format(n);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadHistory();
+</script>
+</body>
+</html>

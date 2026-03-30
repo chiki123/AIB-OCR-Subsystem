@@ -1,0 +1,46 @@
+version: '3.9'
+
+# Только инфраструктура — PostgreSQL и Redis
+# Приложение запускается напрямую на вашем ПК (не в Docker)
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: aib_postgres_dev
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: aib_ocr
+      POSTGRES_USER: aib_user
+      POSTGRES_PASSWORD: localdevpass123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aib_user -d aib_ocr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: aib_redis_dev
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+  

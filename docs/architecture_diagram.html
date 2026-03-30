@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<title>AIB OCR — Architecture Diagram</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; background:#0F1923; color:#E8EDF2; margin:0; padding:24px; }
+  h1 { text-align:center; color:#4EA8DE; font-size:1.2rem; letter-spacing:.08em; margin-bottom:28px; }
+
+  .arch { display:flex; flex-direction:column; gap:0; max-width:900px; margin:0 auto; }
+
+  /* ── Layer ── */
+  .layer {
+    border:1px solid #2A3A4A;
+    border-radius:10px;
+    padding:16px 20px;
+    background:#131F2B;
+    position:relative;
+  }
+  .layer-title {
+    font-size:.7rem; font-weight:700; letter-spacing:.15em;
+    text-transform:uppercase; margin-bottom:12px;
+    padding:3px 10px; border-radius:4px; display:inline-block;
+  }
+
+  /* Layer colors */
+  .input-layer  .layer-title { background:#1A3A2A; color:#4EC994; border:1px solid #2A5A3A; }
+  .api-layer    .layer-title { background:#1A2A3A; color:#4EA8DE; border:1px solid #2A4A5A; }
+  .queue-layer  .layer-title { background:#3A2A1A; color:#DE9A4E; border:1px solid #5A4A2A; }
+  .core-layer   .layer-title { background:#2A1A3A; color:#A04EDE; border:1px solid #4A2A5A; }
+  .output-layer .layer-title { background:#3A1A1A; color:#DE4E4E; border:1px solid #5A2A2A; }
+
+  /* ── Box grid ── */
+  .boxes { display:flex; gap:12px; flex-wrap:wrap; }
+
+  .box {
+    border-radius:8px; padding:10px 14px;
+    font-size:.82rem; flex:1; min-width:120px;
+    border:1px solid;
+  }
+  .box .name { font-weight:600; margin-bottom:4px; }
+  .box .tech { font-size:.72rem; opacity:.7; }
+
+  /* Box variants */
+  .box-green  { background:#0D2018; border-color:#2A5A3A; color:#6BE8A8; }
+  .box-blue   { background:#0D1A28; border-color:#2A4A5A; color:#6BBCE8; }
+  .box-orange { background:#281A0D; border-color:#5A4A2A; color:#E8B86B; }
+  .box-purple { background:#1A0D28; border-color:#4A2A5A; color:#B86BE8; }
+  .box-red    { background:#280D0D; border-color:#5A2A2A; color:#E86B6B; }
+  .box-gray   { background:#161E26; border-color:#2A3A4A; color:#8A9AB0; }
+
+  /* ── Arrow ── */
+  .arrow {
+    display:flex; align-items:center; justify-content:center;
+    height:32px; color:#3A5A7A; font-size:1.2rem;
+  }
+  .arrow span { font-size:.7rem; color:#3A5A7A; margin-left:8px; letter-spacing:.05em; }
+
+  /* ── Core pipeline ── */
+  .pipeline {
+    display:flex; align-items:center; gap:0;
+    flex-wrap:wrap; justify-content:center; margin-top:8px;
+  }
+  .step {
+    background:#1D0D30; border:1px solid #4A2A6A;
+    border-radius:6px; padding:8px 12px;
+    font-size:.75rem; color:#C88AFF; text-align:center;
+    min-width:90px;
+  }
+  .step .num { font-size:.6rem; color:#7A4AAA; display:block; margin-bottom:2px; }
+  .pipe-arrow { color:#4A2A6A; padding:0 4px; font-size:.9rem; }
+
+  /* ── Legend ── */
+  .legend {
+    margin-top:24px; display:flex; gap:16px; flex-wrap:wrap;
+    justify-content:center; font-size:.72rem; color:#5A7A9A;
+  }
+  .legend span { display:flex; align-items:center; gap:5px; }
+  .dot { width:8px; height:8px; border-radius:50%; }
+
+  /* ── Stats ── */
+  .stats {
+    display:flex; gap:16px; flex-wrap:wrap; justify-content:center;
+    margin-top:20px;
+  }
+  .stat {
+    background:#131F2B; border:1px solid #2A3A4A;
+    border-radius:8px; padding:10px 18px; text-align:center;
+  }
+  .stat .val { font-size:1.4rem; font-weight:700; color:#4EA8DE; }
+  .stat .lbl { font-size:.68rem; color:#5A7A9A; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<h1>⚙ AIB OCR SUBSYSTEM — ARCHITECTURE</h1>
+
+<div class="arch">
+
+  <!-- INPUT LAYER -->
+  <div class="layer input-layer">
+    <div class="layer-title">① Input Layer — Слой приёма документов</div>
+    <div class="boxes">
+      <div class="box box-green">
+        <div class="name">📂 File Upload</div>
+        <div class="tech">PDF, JPG, PNG, TIFF · REST API</div>
+      </div>
+      <div class="box box-green">
+        <div class="name">🖨 Hot Folder</div>
+        <div class="tech">Scanner Inbox · watchdog · inotify</div>
+      </div>
+      <div class="box box-green">
+        <div class="name">🖼 Image Upload</div>
+        <div class="tech">JPG, PNG, BMP, WebP</div>
+      </div>
+      <div class="box box-gray">
+        <div class="name">📱 Mobile</div>
+        <div class="tech">Доп. канал (MVP+)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <span>HTTPS / multipart/form-data</span></div>
+
+  <!-- NGINX -->
+  <div class="layer api-layer">
+    <div class="layer-title">② Gateway — Nginx Reverse Proxy</div>
+    <div class="boxes">
+      <div class="box box-blue">
+        <div class="name">🛡 Rate Limiting</div>
+        <div class="tech">10 req/min upload · 100 req/min API</div>
+      </div>
+      <div class="box box-blue">
+        <div class="name">🔒 SSL / TLS 1.3</div>
+        <div class="tech">On-Premise сертификат</div>
+      </div>
+      <div class="box box-blue">
+        <div class="name">⚖ Load Balance</div>
+        <div class="tech">upstream → FastAPI workers</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <span>HTTP/1.1 keepalive</span></div>
+
+  <!-- FASTAPI -->
+  <div class="layer api-layer">
+    <div class="layer-title">③ API Layer — FastAPI Application</div>
+    <div class="boxes">
+      <div class="box box-blue">
+        <div class="name">POST /upload</div>
+        <div class="tech">→ немедленный task_id (202)</div>
+      </div>
+      <div class="box box-blue">
+        <div class="name">GET /tasks/{id}/status</div>
+        <div class="tech">polling / опрос прогресса</div>
+      </div>
+      <div class="box box-blue">
+        <div class="name">GET /documents/{id}</div>
+        <div class="tech">результат + извлечённые поля</div>
+      </div>
+      <div class="box box-blue">
+        <div class="name">POST /auth/login</div>
+        <div class="tech">JWT Bearer Token (RBAC)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <span>enqueue task → Redis</span></div>
+
+  <!-- QUEUE -->
+  <div class="layer queue-layer">
+    <div class="layer-title">④ Queue Layer — Celery + Redis</div>
+    <div class="boxes">
+      <div class="box box-orange">
+        <div class="name">📋 ocr_processing</div>
+        <div class="tech">Очередь обработки документов</div>
+      </div>
+      <div class="box box-orange">
+        <div class="name">🔗 integration</div>
+        <div class="tech">Очередь отправки в 1С</div>
+      </div>
+      <div class="box box-orange">
+        <div class="name">🔄 Beat Scheduler</div>
+        <div class="tech">retry каждые 10 мин · cleanup 24h</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <span>dequeue → Celery Worker</span></div>
+
+  <!-- CORE AI ENGINE -->
+  <div class="layer core-layer">
+    <div class="layer-title">⑤ Core AI Engine — Пайплайн обработки (7 этапов)</div>
+    <div class="pipeline">
+      <div class="step"><span class="num">①</span>Classifier<br/><small>Keywords</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">②</span>Preprocessor<br/><small>OpenCV</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">③</span>OCR Engine<br/><small>PaddleOCR</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">④</span>Extractor<br/><small>Regex</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">⑤</span>Validator<br/><small>ФНС алг.</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">⑥</span>Serializer<br/><small>JSON</small></div>
+      <div class="pipe-arrow">→</div>
+      <div class="step"><span class="num">⑦</span>Integrator<br/><small>1С HTTP</small></div>
+    </div>
+    <div class="boxes" style="margin-top:14px;">
+      <div class="box box-purple">
+        <div class="name">📄 Счет-фактура</div>
+        <div class="tech">ИНН · КПП · НДС · Сумма</div>
+      </div>
+      <div class="box box-purple">
+        <div class="name">📄 УПД</div>
+        <div class="tech">Функция 1/2 · все реквизиты</div>
+      </div>
+      <div class="box box-purple">
+        <div class="name">📄 ТОРГ-12</div>
+        <div class="tech">Поставщик · Получатель · Товары</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ <span>параллельно</span></div>
+
+  <!-- OUTPUT LAYER -->
+  <div class="layer output-layer">
+    <div class="layer-title">⑥ Output Layer — Результаты</div>
+    <div class="boxes">
+      <div class="box box-red">
+        <div class="name">🗄 PostgreSQL</div>
+        <div class="tech">documents · extracted_data · processing_logs</div>
+      </div>
+      <div class="box box-red">
+        <div class="name">🏢 1С:Предприятие</div>
+        <div class="tech">HTTP-сервис · Basic Auth · Circuit Breaker</div>
+      </div>
+      <div class="box box-red">
+        <div class="name">📁 File Storage</div>
+        <div class="tech">uploads/ · processed/ · по дате</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat"><div class="val">≤15с</div><div class="lbl">Время обработки P95</div></div>
+  <div class="stat"><div class="val">97–99%</div><div class="lbl">Точность OCR (рус.)</div></div>
+  <div class="stat"><div class="val">99.5%</div><div class="lbl">Uptime (рабочее время)</div></div>
+  <div class="stat"><div class="val">3</div><div class="lbl">Типа документов MVP</div></div>
+  <div class="stat"><div class="val">4</div><div class="lbl">Канала ввода</div></div>
+  <div class="stat"><div class="val">7</div><div class="lbl">Этапов пайплайна</div></div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <span><div class="dot" style="background:#4EC994"></div> Input channels</span>
+  <span><div class="dot" style="background:#4EA8DE"></div> API / Gateway</span>
+  <span><div class="dot" style="background:#DE9A4E"></div> Async Queue</span>
+  <span><div class="dot" style="background:#A04EDE"></div> Core AI Engine</span>
+  <span><div class="dot" style="background:#DE4E4E"></div> Storage / Output</span>
+</div>
+
+</body>
+</html>
